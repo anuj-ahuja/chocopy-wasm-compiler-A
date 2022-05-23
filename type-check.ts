@@ -42,6 +42,8 @@ export const defaultTypeEnv = {
   classes: new Map(),
 };
 
+// Add a new function to check if a class is a sub class of another class.
+
 export function emptyGlobalTypeEnv() : GlobalTypeEnv {
   return {
     globals: new Map(),
