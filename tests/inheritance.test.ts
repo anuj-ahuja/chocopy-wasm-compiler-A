@@ -604,5 +604,102 @@ kitten : Kitten = None
 kitten = Kitten()
 kitten.speak2()
 `,[`1`]);
+assertPrint("check-super-method", `
+class A(object):
+  def getNum(self : A):
+    print(1)
+    
+class B(A):
+  def getNum(self : B):
+    print(0)
+    super().getNum()
+
+b : B = None
+b = B()
+b.getNum()
+`,[`0`, `1`]);
+assertPrint("check-super-field", `
+class A(object):
+  x:int = 155
+  def __init__(self: A):
+	self.x = 200
+      
+class B(A):
+  y:int = 2
+  
+  def getNum(self : B):
+      print(super().x)
+      
+b: B = None
+b = B()
+b.getNum()
+`,[`200`]);
+assertPrint("check-super-constructors", `
+class A(object):
+  def __init__(self : A):
+    print(0)
+    
+class B(A):
+  def __init__(self : B):
+    super().__init__()
+    print(1)
+
+b : B = None
+b = B()
+
+`,[`0`, `1`]);
+assertPrint("check-super-multilevel", `
+class A(object):
+  def __init__(self : A):
+    print(1)
+    
+class B(A):
+  def __init__(self : B):
+    super().__init__()
+    print(0)
+
+class C(B):
+  def __init__(self : C):
+    super().__init__()
+    print(2)
+
+c : C = None
+c = C()
+`,[`1`, `0`, `2`]);
+assertPrint("check-super-multiple", `
+class A(object):
+  x : int = 1
+      
+class B(object):
+  def getNum(self : B) -> int:
+    return 2
+
+class C(A, B):
+  def getNum(self : C):
+      print(super().x)
+      print(super().getNum())
+      
+c: C = None
+c = C()
+c.getNum()
+`,[`1`, `2`]);
+assertPrint("check-super-multiple-constructors", `
+class A(object):
+  x : int = 1
+  def __init__(self : A):
+    print(self.x)
+      
+class B(object):
+  y : int = 2
+  def __init__(self : B):
+    print(self.y)
+
+class C(A, B):
+  def __init__(self : C):
+    super().__init__()
+      
+c: C = None
+c = C()
+`,[`1`]);
 });
 

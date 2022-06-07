@@ -727,6 +727,9 @@ export function tcStmt(env: GlobalTypeEnv, locals: LocalTypeEnv, stmt: Stmt<Anno
       }
       return {a: { ...stmt.a, type: NONE }, tag: stmt.tag, destruct: tDestruct, value: tValExpr};
     case "expr":
+      if (stmt.expr.tag === "method-call" && stmt.expr.obj.tag === "call" && stmt.expr.obj.fn.tag === "id" && stmt.expr.obj.fn.name==="super" && stmt.expr.method === "__init__") {
+        stmt.expr = stmt.expr.obj
+      }
       const tExpr = tcExpr(env, locals, stmt.expr, SRC);
       return { a: tExpr.a, tag: stmt.tag, expr: tExpr };
     case "if":
@@ -960,9 +963,34 @@ export function tcExpr(env: GlobalTypeEnv, locals: LocalTypeEnv, expr: Expr<Anno
         throw new TypeCheckError(SRC, "Undefined function: " + expr.name, expr.a);
       }
     case "call":
-      if (expr.fn.tag === "id" && env.classes.has(expr.fn.name)) {
+      if (expr.fn.tag === "id" && (env.classes.has(expr.fn.name) || expr.fn.name.startsWith("super"))) {
         // surprise surprise this is actually a constructor
-        const tConstruct: Expr<Annotation> = { a: { ...expr.a, type: CLASS(expr.fn.name) }, tag: "construct", name: expr.fn.name };
+        var cname;
+        if (expr.fn.name.startsWith("super")) {
+          var currClass = locals.vars.get("self");
+          var methodOrVar = expr.fn.name.substring(expr.fn.name.indexOf("super")+5);
+          if (currClass.tag === "class") {
+            var superClasses = [...env.classes.get(currClass.name)[2].keys()];
+            if (methodOrVar === "") { //constructor
+              expr.fn.name = superClasses[0];
+              cname = CLASS(superClasses[0]);
+            } else {
+              for (var superClass of superClasses) {
+                if (env.classes.get(superClass)[0].has(methodOrVar) || env.classes.get(superClass)[1].has(methodOrVar)) {
+                  expr.fn.name = superClass;
+                  cname = CLASS(superClass);
+                  break;
+                }
+              }
+            }
+          } else {
+            throw new TypeCheckError(SRC, "super() invoked outside class");
+          }
+        } else {
+          cname = CLASS(expr.fn.name)
+        }
+
+        const tConstruct: Expr<Annotation> = { a: { ...expr.a, type: cname }, tag: "construct", name: expr.fn.name };
         const [_, methods] = env.classes.get(expr.fn.name);
         if (methods.has("__init__")) {
           const [initArgs, initRet] = methods.get("__init__");
@@ -977,7 +1005,7 @@ export function tcExpr(env: GlobalTypeEnv, locals: LocalTypeEnv, expr: Expr<Anno
       } else {
         const newFn = tcExpr(env, locals, expr.fn, SRC);
         if(newFn.a.type.tag !== "callable") {
-          throw new TypeCheckError("Cannot call non-callable expression");
+          throw new TypeCheckError(SRC, "Cannot call non-callable expression");
         }
         const tArgs = expr.arguments.map(arg => tcExpr(env, locals, arg, SRC));
         
@@ -991,6 +1019,9 @@ export function tcExpr(env: GlobalTypeEnv, locals: LocalTypeEnv, expr: Expr<Anno
         }
       }
     case "lookup":
+      if (expr.obj.tag === "call" && expr.obj.fn.tag === "id" && expr.obj.fn.name === "super") {
+        expr.obj.fn.name = "super" + expr.field
+      }
       var tObj = tcExpr(env, locals, expr.obj, SRC);
       if (tObj.a.type.tag === "class") {
         if (env.classes.has(tObj.a.type.name)) {
@@ -1047,6 +1078,9 @@ export function tcExpr(env: GlobalTypeEnv, locals: LocalTypeEnv, expr: Expr<Anno
         throw new TypeCheckError(`unsupported slice operation`);
       }
     case "method-call":
+      if (expr.obj.tag === "call" && expr.obj.fn.tag === "id" && expr.obj.fn.name === "super") {
+        expr.obj.fn.name = "super" + expr.method
+      }
       var tObj = tcExpr(env, locals, expr.obj, SRC);
       var tArgs = expr.arguments.map(arg => tcExpr(env, locals, arg, SRC));
       if (tObj.a.type.tag === "class") {
